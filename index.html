@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>On-draw</title>
+<meta name="theme-color" content="#FF9F43">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="On-draw">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root {
+  --primary: #FF9F43; --primary-deep: #E8801F; --primary-light: #FFF1E2;
+  --bg: #F7F4F0; --card: #FFFFFF; --text: #1F1A14; --sub: #857B70; --line: #EFE8DF; --input: #F5F1EC;
+  --bad: #F04452; --good: #1E9E5A;
+  --r1: #FF4D8D; --r2: #F7B500; --r3: #A35BFF; --r4: #2D7FE0; --r5: #1EAE6A; --r0: #9A9087;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body { font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif; background: var(--bg); color: var(--text); overscroll-behavior: none; -webkit-user-select: none; user-select: none; }
+button { font-family: inherit; border: none; background: none; color: inherit; cursor: pointer; }
+input { font-family: inherit; font-size: 16px; color: var(--text); -webkit-user-select: text; user-select: text; }
+.hidden { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+.screen { min-height: 100%; }
+
+/* ---------- 공통 ---------- */
+.field { height: 50px; border-radius: 14px; border: 2px solid var(--line); background: var(--card); padding: 0 14px; outline: none; width: 100%; }
+.field:focus { border-color: var(--primary); }
+.btn { height: 52px; border-radius: 14px; background: var(--primary); color: #fff; font-size: 17px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 18px; }
+.btn:disabled { opacity: 0.45; }
+.btn.ghost { background: var(--primary-light); color: var(--primary-deep); }
+.btn.gray { background: var(--input); color: var(--sub); }
+.btn.red { background: var(--bad); }
+.btn.block { width: 100%; }
+.msg { color: var(--bad); font-size: 13px; text-align: center; min-height: 18px; line-height: 1.5; }
+.hint { font-size: 13px; color: var(--sub); line-height: 1.6; }
+.link-btn { color: var(--sub); font-size: 13px; text-decoration: underline; padding: 4px; }
+.topbar { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 14px 10px; }
+.topbar h1 { font-size: 20px; font-weight: 900; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn { width: 40px; height: 40px; border-radius: 13px; background: var(--card); box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-size: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 0 14px calc(30px + env(safe-area-inset-bottom)); }
+.toast { position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 99; background: rgba(31,26,20,0.92); color: #fff; padding: 11px 18px; border-radius: 20px; font-size: 14px; font-weight: 700; max-width: 90%; text-align: center; pointer-events: none; }
+.toast.ok { background: var(--good); }
+.toast.err { background: var(--bad); }
+.overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,0.45); display: flex; align-items: flex-end; justify-content: center; }
+.overlay.center { align-items: center; padding: 18px; }
+.sheet { width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; background: var(--card); border-radius: 24px 24px 0 0; padding: 20px 18px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: up 0.2s ease-out; }
+.sheet > * { flex-shrink: 0; }
+.overlay.center .sheet { border-radius: 24px; }
+@keyframes up { from { transform: translateY(40px); opacity: 0.5; } }
+.sheet h3 { font-size: 19px; font-weight: 900; }
+.menu-btn { display: flex; align-items: center; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 700; width: 100%; text-align: left; }
+.menu-btn:last-child { border-bottom: none; }
+.menu-btn .mi { font-size: 20px; width: 28px; text-align: center; }
+
+/* ---------- 로그인 ---------- */
+#login { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; overflow-y: auto; background: linear-gradient(180deg, #FFE3C4 0%, #FFF6EC 55%, var(--bg) 100%); z-index: 30; }
+.login-box { width: 100%; max-width: 370px; display: flex; flex-direction: column; gap: 12px; }
+.big-logo { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 14px; }
+.big-logo img { width: 92px; height: 92px; border-radius: 26px; box-shadow: 0 14px 30px rgba(255,159,67,0.45); }
+.big-logo h1 { font-size: 34px; font-weight: 900; letter-spacing: -1px; }
+.big-logo h1 b { color: var(--primary); }
+.big-logo p { color: var(--sub); font-size: 14px; text-align: center; line-height: 1.6; }
+
+/* ---------- 판 고르기 ---------- */
+.pick-title { font-size: 15px; font-weight: 800; color: var(--sub); margin: 6px 2px 10px; }
+.presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.preset { background: var(--card); border-radius: 20px; padding: 16px 14px; text-align: left; box-shadow: 0 4px 14px rgba(80,50,20,0.06); display: flex; flex-direction: column; gap: 6px; transition: transform 0.12s; }
+.preset:active { transform: scale(0.96); }
+.preset .pe { font-size: 34px; }
+.preset b { font-size: 16px; font-weight: 900; }
+.preset span { font-size: 12px; color: var(--sub); line-height: 1.45; }
+.preset.custom { grid-column: 1 / -1; flex-direction: row; align-items: center; gap: 12px; background: var(--primary-light); }
+.preset.custom .pe { font-size: 30px; }
+.cfg { background: var(--card); border-radius: 18px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.cfg-row { display: flex; align-items: center; gap: 10px; }
+.cfg-row .lab { flex: 1; font-size: 14px; font-weight: 800; min-width: 0; }
+.rank-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; height: 26px; border-radius: 9px; color: #fff; font-size: 12px; font-weight: 900; padding: 0 7px; }
+.stepper { display: flex; align-items: center; gap: 4px; }
+.stepper button { width: 34px; height: 34px; border-radius: 10px; background: var(--input); font-size: 18px; font-weight: 800; }
+.stepper input { width: 58px; height: 34px; border-radius: 10px; border: none; background: var(--input); text-align: center; font-weight: 800; outline: none; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { height: 32px; padding: 0 12px; border-radius: 16px; background: var(--input); font-size: 13px; font-weight: 800; color: var(--sub); }
+.chip.on { background: var(--primary); color: #fff; }
+.switch { width: 52px; height: 30px; border-radius: 15px; background: #D9D0C5; position: relative; flex-shrink: 0; transition: background 0.2s; }
+.switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.switch.on { background: var(--primary); }
+.switch.on::after { left: 25px; }
+.sum-line { font-size: 13px; font-weight: 800; text-align: center; padding: 8px; border-radius: 12px; background: var(--input); }
+.sum-line.bad { color: var(--bad); background: #FFE9EB; }
+.prize-in { display: flex; align-items: center; gap: 8px; }
+.prize-in .field { height: 44px; }
+
+/* ---------- 뽑기판 ---------- */
+.board-frame { background: linear-gradient(180deg, #FFB45E, #FF9F43); border-radius: 22px; padding: 12px 10px 14px; box-shadow: 0 10px 26px rgba(232,128,31,0.3); }
+.board-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 10px; color: #fff; }
+.board-head .bn { font-size: 19px; font-weight: 900; flex: 1; min-width: 0; text-shadow: 0 2px 0 rgba(0,0,0,0.12); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board-head .left { font-size: 13px; font-weight: 900; background: rgba(255,255,255,0.25); padding: 5px 10px; border-radius: 10px; }
+.prizes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 10px; }
+.prize { background: #FFFDF6; border-radius: 12px; padding: 7px 4px 6px; text-align: center; position: relative; overflow: hidden; }
+.prize .pr { font-size: 11px; font-weight: 900; color: #fff; border-radius: 7px; padding: 2px 0; }
+.prize .pn { font-size: 11px; font-weight: 800; margin-top: 4px; line-height: 1.25; height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: keep-all; }
+.prize .pc { font-size: 11px; color: var(--sub); font-weight: 800; margin-top: 2px; }
+.prize.gone { opacity: 0.5; }
+.prize.gone::after { content: "당첨 끝"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-14deg); border: 2px solid var(--bad); color: var(--bad); font-size: 11px; font-weight: 900; padding: 1px 5px; border-radius: 6px; background: rgba(255,255,255,0.85); }
+.ggwang-line { text-align: center; color: #fff; font-size: 12px; font-weight: 800; margin: -4px 0 8px; opacity: 0.95; }
+.tabs { background: #FFF6D8; border-radius: 14px; padding: 8px 6px; display: flex; gap: 4px; justify-content: center; }
+.strip { display: flex; flex-direction: column; background: #2E5BD9; border-radius: 6px; padding: 2px 0; flex: 1; max-width: 40px; min-width: 0; }
+.tab { position: relative; height: 30px; display: flex; align-items: center; justify-content: center; color: #FFE24A; font-size: 16px; line-height: 1; border-bottom: 1.5px dashed rgba(255,255,255,0.35); }
+.tab:last-child { border-bottom: none; }
+.tab:active { transform: scale(0.88); }
+.tab.torn { color: transparent; pointer-events: none; }
+.tab.torn::before { content: ""; position: absolute; inset: 3px 4px; background: #FFF6D8; clip-path: polygon(0 0, 100% 0, 100% 70%, 85% 85%, 70% 72%, 55% 90%, 40% 75%, 25% 88%, 10% 74%, 0 86%); opacity: 0.9; }
+.tab.empty { pointer-events: none; color: transparent; border-bottom-color: transparent; }
+.board-foot { display: flex; gap: 8px; margin-top: 12px; }
+.board-foot .btn { flex: 1; height: 46px; font-size: 15px; }
+.lucky-btn { background: #fff !important; color: var(--primary-deep) !important; }
+.stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 14px; }
+.stat { background: var(--card); border-radius: 12px; padding: 8px 2px; text-align: center; }
+.stat b { display: block; font-size: 16px; font-weight: 900; }
+.stat span { font-size: 10px; color: var(--sub); font-weight: 800; }
+
+/* ---------- 뽑는 화면 ---------- */
+#stage { position: fixed; inset: 0; z-index: 50; background: radial-gradient(circle at 50% 40%, #3A2A1C 0%, #120C08 80%); color: #fff; display: flex; flex-direction: column; align-items: center; overflow: hidden; touch-action: none; }
+#stage .st-top { width: 100%; display: flex; align-items: center; padding: calc(12px + env(safe-area-inset-top)) 14px 0; gap: 8px; }
+#stage .st-top .t { flex: 1; font-size: 15px; font-weight: 800; opacity: 0.85; }
+#stage .st-close { width: 40px; height: 40px; border-radius: 13px; background: rgba(255,255,255,0.12); font-size: 17px; font-weight: 800; }
+.st-guide { margin-top: 10px; font-size: 16px; font-weight: 800; min-height: 24px; text-align: center; padding: 0 20px; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+.st-area { position: relative; flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; perspective: 900px; }
+/* 뜯기 */
+.tear-strip { position: absolute; top: 12%; left: 50%; transform: translateX(-50%); width: 120px; height: 90px; background: #2E5BD9; border-radius: 10px 10px 0 0; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+.tear-strip::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 4px; background: repeating-linear-gradient(90deg, transparent 0 6px, rgba(255,255,255,0.6) 6px 10px); }
+.tear-tab { position: absolute; top: calc(12% + 90px); left: 50%; width: 120px; height: 120px; margin-left: -60px; background: #2E5BD9; border-radius: 0 0 12px 12px; display: flex; align-items: center; justify-content: center; font-size: 66px; color: #FFE24A; box-shadow: 0 14px 30px rgba(0,0,0,0.45); transform-origin: 50% 0; will-change: transform; }
+.tear-tab .rip { position: absolute; top: -3px; left: 0; height: 6px; background: repeating-linear-gradient(90deg, #fff 0 5px, transparent 5px 9px); opacity: 0.85; }
+.pull-hint { position: absolute; bottom: 16%; left: 50%; transform: translateX(-50%); font-size: 40px; animation: bob 1s ease-in-out infinite; opacity: 0.85; }
+@keyframes bob { 50% { transform: translate(-50%, 14px); } }
+/* 접힌 종이 */
+.paper { position: relative; width: 240px; height: 240px; transform-style: preserve-3d; will-change: transform; }
+.paper .half { position: absolute; top: 0; width: 120px; height: 240px; overflow: hidden; }
+.paper .base { left: 0; border-radius: 14px 0 0 14px; }
+.paper .flap { left: 120px; transform-origin: 0 50%; transform-style: preserve-3d; transition: none; }
+.paper .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; }
+.paper .face.in { border-radius: 0 14px 14px 0; }
+.paper .face.out { transform: rotateY(180deg); border-radius: 14px 0 0 14px; background: #FFF8E6; background-image: radial-gradient(circle at 30% 30%, rgba(255,159,67,0.18) 0 8px, transparent 9px), radial-gradient(circle at 70% 70%, rgba(46,91,217,0.14) 0 6px, transparent 7px); background-size: 34px 34px; display: flex; align-items: center; justify-content: center; }
+.paper .face.out .stamp { transform: rotate(-90deg); font-size: 18px; font-weight: 900; color: var(--primary-deep); letter-spacing: 2px; white-space: nowrap; }
+.result { position: absolute; top: 0; width: 240px; height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 18px; }
+.base .result { left: 0; }
+.flap .result { left: -120px; }
+.result .rk { font-size: 64px; font-weight: 900; line-height: 1; letter-spacing: -2px; color: #fff; text-shadow: 0 4px 0 rgba(0,0,0,0.15); }
+.result .rp { font-size: 17px; font-weight: 800; color: #fff; word-break: keep-all; line-height: 1.35; }
+.result .rs { font-size: 12px; color: rgba(255,255,255,0.85); font-weight: 700; }
+.edge-glow { position: absolute; inset: -18px; border-radius: 30px; pointer-events: none; opacity: 0; filter: blur(14px); transition: opacity 0.2s; }
+.st-bottom { width: 100%; max-width: 420px; padding: 0 18px calc(22px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 10px; min-height: 140px; justify-content: flex-end; }
+.st-bottom .btn.ghost { background: rgba(255,255,255,0.14); color: #fff; }
+.big-rank { font-size: 26px; font-weight: 900; text-align: center; }
+.rays { position: absolute; left: 50%; top: 50%; width: 900px; height: 900px; margin: -450px 0 0 -450px; pointer-events: none; opacity: 0; background: repeating-conic-gradient(from 0deg, rgba(255,255,255,0.18) 0deg 8deg, transparent 8deg 22deg); border-radius: 50%; mask-image: radial-gradient(circle, #000 20%, transparent 65%); -webkit-mask-image: radial-gradient(circle, #000 20%, transparent 65%); animation: spin 14s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.shake { animation: shk 0.12s linear infinite; }
+@keyframes shk { 25% { transform: translate(-2px, 1px) rotate(-1deg); } 75% { transform: translate(2px, -1px) rotate(1deg); } }
+.flash { position: fixed; inset: 0; background: #fff; z-index: 70; pointer-events: none; animation: fl 0.6s ease-out forwards; }
+@keyframes fl { from { opacity: 0.95; } to { opacity: 0; } }
+#fx { position: fixed; inset: 0; z-index: 65; pointer-events: none; }
+.hist { background: var(--card); border-radius: 14px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.hist .when { font-size: 11px; color: var(--sub); }
+.hist .what { font-size: 14px; font-weight: 800; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login">
+  <div class="login-box">
+    <div class="big-logo">
+      <img src="icon-192.png" alt="">
+      <h1>On<b>-draw</b></h1>
+      <p>손으로 뜯는 추억의 뽑기<br>온챗 계정으로 로그인해요</p>
+    </div>
+    <input id="l-phone" class="field" type="tel" maxlength="13" placeholder="온챗 전화번호" autocomplete="tel">
+    <input id="l-email" class="field hidden" type="email" placeholder="예전에 가입한 Gmail" autocomplete="email">
+    <input id="l-pw" class="field" type="password" placeholder="온챗 비밀번호" autocomplete="current-password">
+    <div id="l-msg" class="msg"></div>
+    <button id="l-go" class="btn block" type="button">로그인</button>
+    <button id="l-gmail" class="link-btn" type="button">예전에 Gmail로 가입했어요</button>
+    <div class="hint" style="text-align:center">온챗 계정이 없으면 온챗에서 먼저 가입해 주세요.</div>
+  </div>
+</div>
+
+<!-- 판 고르기 / 만들기 -->
+<div id="pick" class="screen hidden">
+  <div class="topbar"><button id="pick-back" class="icon-btn hidden" type="button">←</button><h1>🎟️ 어떤 뽑기판?</h1><button class="icon-btn menu-open" type="button">☰</button></div>
+  <div class="wrap" id="pick-body"></div>
+</div>
+
+<!-- 뽑기판 -->
+<div id="board" class="screen hidden">
+  <div class="topbar"><h1>🎟️ On-draw</h1><button id="btn-hist" class="icon-btn" type="button">📜</button><button class="icon-btn menu-open" type="button">☰</button></div>
+  <div class="wrap">
+    <div class="board-frame">
+      <div class="board-head"><div class="bn" id="b-name"></div><div class="left num" id="b-left"></div></div>
+      <div class="prizes" id="b-prizes"></div>
+      <div class="ggwang-line" id="b-ggwang"></div>
+      <div class="tabs" id="b-tabs"></div>
+      <div class="board-foot">
+        <button id="btn-random" class="btn lucky-btn" type="button">🎲 아무 칸이나</button>
+        <button id="btn-new" class="btn ghost" type="button" style="background:rgba(255,255,255,0.25);color:#fff">🔄 새 판</button>
+      </div>
+    </div>
+    <div class="stats" id="b-stats"></div>
+  </div>
+</div>
+
+<!-- 뽑는 화면 -->
+<div id="stage" class="hidden">
+  <div class="st-top"><div class="t" id="st-title"></div><button id="st-close" class="st-close" type="button">✕</button></div>
+  <div class="st-guide" id="st-guide"></div>
+  <div class="st-area" id="st-area"></div>
+  <div class="st-bottom" id="st-bottom"></div>
+</div>
+
+<canvas id="fx"></canvas>
+<div id="overlay" class="overlay hidden"><div id="sheet" class="sheet"></div></div>
+<div id="toast" class="toast hidden"></div>
+
+<!-- Firebase (온챗 프로젝트: 로그인은 온챗 계정, 뽑기판은 Realtime Database "ondraw" 칸) -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-database.js";
+try {
+  const app = initializeApp({
+    apiKey: "AIzaSyDtaB6Me_uGpgZaW6ca4p6NVk_TEbxO6IA",
+    authDomain: "onchat-fc78e.firebaseapp.com",
+    databaseURL: "https://onchat-fc78e-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "onchat-fc78e",
+    appId: "1:939252436157:web:d8a55283aa9c17fa6e3bd4",
+  });
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+  window.odRemote = {
+    login: (email, pw) => signInWithEmailAndPassword(auth, email, pw),
+    logout: () => signOut(auth),
+    onAuth: (cb) => onAuthStateChanged(auth, cb),
+    put: (path, v) => set(ref(db, "ondraw/" + path), v),
+    once: (path, cb) => onValue(ref(db, "ondraw/" + path), (s) => cb(s.val()), (e) => cb(undefined, e), { onlyOnce: true }),
+  };
+  window.dispatchEvent(new Event("odremote-ready"));
+} catch (e) { console.warn("서버 연결 실패", e); }
+</script>
+
+<script>
+"use strict";
+/* =====================================================================
+   On-draw : 손으로 뜯는 추억의 뽑기
+   1) 판 고르기 (준비된 판 or 직접 만들기: 칸 수 · 등수별 개수 · 꽝 · 상품 이름)
+   2) 칸을 아래로 당겨서 뜯고 → 접힌 종이를 옆으로 밀어서 펼치기
+   3) 판 안에 정해진 만큼만 당첨 (1등이 나오면 그 판엔 더 없음)
+   ===================================================================== */
+const $ = (id) => document.getElementById(id);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+const fmt = (n) => Math.round(n).toLocaleString("ko-KR");
+const RANK_COLOR = { 1: "#FF4D8D", 2: "#F7B500", 3: "#A35BFF", 4: "#2D7FE0", 5: "#1EAE6A", 0: "#9A9087" };
+const RANK_BG = {
+  1: "linear-gradient(135deg,#FF4D8D,#FF9F43,#F7D547,#3BD18A,#3B9BFF,#A35BFF)",
+  2: "linear-gradient(135deg,#FFD84D,#F7A800)",
+  3: "linear-gradient(135deg,#C08BFF,#8A3FFC)",
+  4: "linear-gradient(135deg,#5AA8FF,#2D6FE0)",
+  5: "linear-gradient(135deg,#4FD18F,#1E9E5A)",
+  0: "linear-gradient(135deg,#B9B0A6,#8F857B)",
+};
+const rankName = (r) => (r ? `${r}등` : "꽝");
+const DEFAULT_PRIZES = ["대왕 곰인형 🧸", "무선 RC카 🚗", "슬라임 세트 🫧", "왕사탕 🍭", "딱지 한 장 🃏"];
+const PRESETS = [
+  { emoji: "🍬", name: "꼬마 뽑기", desc: "30칸 · 꽝 없음 · 빨리 끝나요", total: 30, ggwang: false, counts: [1, 2, 4, 8, 15] },
+  { emoji: "⭐", name: "추억의 문방구", desc: "100칸 · 꽝 70개 · 진짜 문방구처럼", total: 100, ggwang: true, counts: [1, 2, 4, 8, 15] },
+  { emoji: "🎪", name: "왕뽑기", desc: "200칸 · 꽝 140개 · 오래 즐겨요", total: 200, ggwang: true, counts: [1, 3, 6, 15, 35] },
+  { emoji: "🏆", name: "전부 당첨", desc: "50칸 · 꽝 없음 · 다 상품!", total: 50, ggwang: false, counts: [1, 3, 6, 12, 28] },
+];
+const MAX_TABS = 500;
+
+/* ---------------- 상태 ---------------- */
+let uid = null, myPhone = "";
+let data = null;    // { board, stats, history, settings }
+let toastTimer = null;
+function toast(text, kind = "") {
+  const t = $("toast"); t.textContent = text; t.className = "toast " + kind;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 2300);
+}
+function openSheet(build, center = false) { $("sheet").replaceChildren(); build($("sheet")); $("overlay").classList.toggle("center", center); $("overlay").classList.remove("hidden"); }
+function closeSheet() { $("overlay").classList.add("hidden"); }
+$("overlay").addEventListener("click", (e) => { if (e.target === $("overlay")) closeSheet(); });
+function show(id) { for (const s of ["login", "pick", "board"]) $(s).classList.toggle("hidden", s !== id); }
+function rnd(n) { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
+
+/* ---------------- 저장 ---------------- */
+function blankData() { return { board: null, stats: { draws: 0, r0: 0, r1: 0, r2: 0, r3: 0, r4: 0, r5: 0, boards: 0 }, history: [], settings: { sound: true, quick: false } }; }
+function normalize(v) {
+  const d = blankData();
+  if (!v) return d;
+  d.board = v.board || null;
+  Object.assign(d.stats, v.stats || {});
+  d.history = Array.isArray(v.history) ? v.history : Object.values(v.history || {});
+  Object.assign(d.settings, v.settings || {});
+  if (d.board) d.board.prizes = Array.isArray(d.board.prizes) ? d.board.prizes : Object.values(d.board.prizes || {});
+  return d;
+}
+let saveTimer = null;
+function save(now = false) {
+  if (!uid || !data) return;
+  clearTimeout(saveTimer);
+  const go = () => window.odRemote.put("users/" + uid, JSON.parse(JSON.stringify(data))).catch(() => toast("저장하지 못했어요 (인터넷 확인)", "err"));
+  if (now) go(); else saveTimer = setTimeout(go, 300);
+}
+
+/* ---------------- 판 만들기 ---------------- */
+function makeBoard(cfg) {
+  const ranks = [];
+  cfg.counts.forEach((n, i) => { for (let k = 0; k < n; k++) ranks.push(i + 1); });
+  while (ranks.length < cfg.total) ranks.push(0);
+  for (let i = ranks.length - 1; i > 0; i--) { const j = rnd(i + 1); [ranks[i], ranks[j]] = [ranks[j], ranks[i]]; } // 섞기
+  return {
+    name: cfg.name || "뽑기판", total: cfg.total, counts: cfg.counts.slice(), ggwang: cfg.total - cfg.counts.reduce((a, b) => a + b, 0),
+    prizes: cfg.prizes.slice(), deck: ranks.join(""), taken: "0".repeat(cfg.total), createdAt: Date.now(),
+  };
+}
+const takenCount = (b) => b.taken.split("").filter((c) => c === "1").length;
+function remainingOf(b, r) {
+  let n = 0;
+  for (let i = 0; i < b.total; i++) if (b.taken[i] === "0" && b.deck[i] === String(r)) n++;
+  return n;
+}
+
+function renderPick(canBack) {
+  show("pick");
+  $("pick-back").classList.toggle("hidden", !canBack);
+  const body = $("pick-body");
+  body.replaceChildren();
+  body.append(el("div", "pick-title", "준비된 판을 고르거나 직접 만들어요. 고른 뒤에도 전부 바꿀 수 있어요!"));
+  const grid = el("div", "presets");
+  for (const p of PRESETS) {
+    const b = el("button", "preset");
+    b.type = "button";
+    b.append(el("div", "pe", p.emoji), el("b", null, p.name), el("span", null, p.desc));
+    b.onclick = () => renderConfig({ name: p.name, total: p.total, ggwang: p.ggwang, counts: p.counts.slice(), prizes: DEFAULT_PRIZES.slice() }, canBack);
+    grid.append(b);
+  }
+  const c = el("button", "preset custom");
+  c.type = "button";
+  const txt = el("div");
+  txt.append(el("b", null, "직접 만들기"), el("span", null, "\n칸 수, 등수별 개수, 꽝, 상품 이름 전부 내 마음대로"));
+  txt.lastChild.style.whiteSpace = "pre-line";
+  c.append(el("div", "pe", "🛠️"), txt);
+  c.onclick = () => renderConfig({ name: "나만의 뽑기판", total: 60, ggwang: true, counts: [1, 2, 3, 6, 12], prizes: DEFAULT_PRIZES.slice() }, canBack);
+  grid.append(c);
+  body.append(grid);
+}
+$("pick-back").onclick = () => { if (data.board) renderBoard(); };
+
+function renderConfig(cfg, canBack) {
+  show("pick");
+  $("pick-back").classList.remove("hidden");
+  $("pick-back").onclick = () => renderPick(canBack);
+  const body = $("pick-body");
+  body.replaceChildren();
+  const box = el("div", "cfg");
+  // 이름
+  box.append(el("div", "lab", "판 이름"));
+  const nameIn = el("input", "field"); nameIn.value = cfg.name; nameIn.maxLength = 16;
+  nameIn.oninput = () => (cfg.name = nameIn.value);
+  box.append(nameIn);
+  // 칸 수
+  const totRow = el("div", "cfg-row");
+  totRow.append(el("div", "lab", "칸 수"));
+  const totStep = stepper(cfg.total, 5, MAX_TABS, (v) => { cfg.total = v; refresh(); });
+  totRow.append(totStep.box);
+  box.append(totRow);
+  const chips = el("div", "chips");
+  for (const n of [30, 50, 100, 200, 300, 500]) {
+    const ch = el("button", "chip", `${n}칸`); ch.type = "button";
+    ch.onclick = () => { cfg.total = n; totStep.set(n); refresh(); };
+    chips.append(ch);
+  }
+  box.append(chips);
+  // 꽝
+  const gRow = el("div", "cfg-row");
+  gRow.append(el("div", "lab", "꽝 넣기"));
+  const sw = el("button", "switch" + (cfg.ggwang ? " on" : "")); sw.type = "button";
+  sw.onclick = () => { cfg.ggwang = !cfg.ggwang; sw.classList.toggle("on", cfg.ggwang); refresh(); };
+  gRow.append(sw);
+  box.append(gRow);
+  body.append(box);
+  // 등수별 개수 + 상품
+  const box2 = el("div", "cfg");
+  box2.style.marginTop = "10px";
+  box2.append(el("div", "lab", "등수별 개수와 상품"));
+  const steps = [];
+  for (let r = 1; r <= 5; r++) {
+    const row = el("div", "cfg-row");
+    const dot = el("span", "rank-dot", `${r}등`); dot.style.background = RANK_COLOR[r];
+    const pin = el("input", "field"); pin.value = cfg.prizes[r - 1]; pin.maxLength = 20; pin.placeholder = `${r}등 상품`;
+    pin.style.height = "40px"; pin.style.flex = "1"; pin.style.minWidth = "0";
+    pin.oninput = () => (cfg.prizes[r - 1] = pin.value);
+    const st = stepper(cfg.counts[r - 1], 0, MAX_TABS, (v) => { cfg.counts[r - 1] = v; refresh(); });
+    st.box.querySelector("input").style.width = "46px";
+    steps.push(st);
+    row.append(dot, pin, st.box);
+    box2.append(row);
+  }
+  const sum = el("div", "sum-line");
+  box2.append(sum);
+  const fill = el("button", "chip", "남는 칸은 5등으로 채우기"); fill.type = "button";
+  fill.onclick = () => { const s = cfg.counts.slice(0, 4).reduce((a, b) => a + b, 0); cfg.counts[4] = Math.max(0, cfg.total - s); steps[4].set(cfg.counts[4]); refresh(); };
+  box2.append(fill);
+  body.append(box2);
+  const msg = el("div", "msg");
+  msg.style.marginTop = "10px";
+  body.append(msg);
+  const go = el("button", "btn block", "🎟️ 이 판으로 시작!");
+  go.type = "button";
+  go.style.marginTop = "6px";
+  body.append(go);
+  function refresh() {
+    const s = cfg.counts.reduce((a, b) => a + b, 0);
+    const left = cfg.total - s;
+    let text, bad = false;
+    if (cfg.ggwang) { text = left >= 0 ? `당첨 ${s}개 + 꽝 ${left}개 = ${cfg.total}칸` : `당첨이 칸 수보다 ${-left}개 많아요`; bad = left < 0; }
+    else { text = left === 0 ? `당첨 ${s}개 = ${cfg.total}칸 딱 맞아요 👍` : left > 0 ? `${left}칸이 남아요 (꽝 없으면 딱 맞춰야 해요)` : `당첨이 칸 수보다 ${-left}개 많아요`; bad = left !== 0; }
+    sum.textContent = text;
+    sum.classList.toggle("bad", bad);
+    go.disabled = bad || s === 0;
+    fill.classList.toggle("hidden", cfg.ggwang || left === 0);
+    msg.textContent = "";
+  }
+  refresh();
+  go.onclick = () => {
+    cfg.name = cfg.name.trim() || "뽑기판";
+    cfg.prizes = cfg.prizes.map((p, i) => p.trim() || `${i + 1}등 상품`);
+    data.board = makeBoard(cfg);
+    data.stats.boards++;
+    save(true);
+    renderBoard();
+    toast(`🎟️ ${cfg.name} 시작! 칸을 눌러서 뜯어 보세요`, "ok");
+  };
+}
+function stepper(value, min, max, onChange) {
+  const box = el("div", "stepper");
+  const minus = el("button", null, "−"), plus = el("button", null, "+");
+  minus.type = plus.type = "button";
+  const inp = el("input"); inp.type = "number"; inp.inputMode = "numeric"; inp.value = value;
+  const set = (v) => { v = Math.max(min, Math.min(max, Math.round(Number(v) || 0))); inp.value = v; return v; };
+  const change = (v) => onChange(set(v));
+  minus.onclick = () => change(Number(inp.value) - 1);
+  plus.onclick = () => change(Number(inp.value) + 1);
+  inp.onchange = () => change(inp.value);
+  box.append(minus, inp, plus);
+  return { box, set };
+}
+
+/* ---------------- 뽑기판 ---------------- */
+function renderBoard() {
+  const b = data.board;
+  if (!b) return renderPick(false);
+  show("board");
+  $("b-name").textContent = b.name;
+  const left = b.total - takenCount(b);
+  $("b-left").textContent = `남은 칸 ${fmt(left)} / ${fmt(b.total)}`;
+  const pz = $("b-prizes");
+  pz.replaceChildren();
+  for (let r = 1; r <= 5; r++) {
+    const n = b.counts[r - 1];
+    const rem = remainingOf(b, r);
+    const card = el("div", "prize" + (n > 0 && rem === 0 ? " gone" : ""));
+    const tag = el("div", "pr", `${r}등`); tag.style.background = RANK_COLOR[r];
+    card.append(tag, el("div", "pn", b.prizes[r - 1]), el("div", "pc num", n ? `${rem}/${n}` : "없음"));
+    pz.append(card);
+  }
+  $("b-ggwang").textContent = b.ggwang > 0 ? `꽝 남은 개수 ${remainingOf(b, 0)} / ${b.ggwang}` : "이 판은 꽝 없음! 전부 당첨 🎉";
+  // 칸 (세로 줄무늬)
+  const tabs = $("b-tabs");
+  tabs.replaceChildren();
+  const w = Math.min(640, window.innerWidth) - 28 - 20 - 12;
+  const cols = Math.max(5, Math.min(14, Math.floor(w / 31)));
+  const rows = Math.ceil(b.total / cols);
+  for (let c = 0; c < cols; c++) {
+    const strip = el("div", "strip");
+    for (let r = 0; r < rows; r++) {
+      const i = c * rows + r;
+      const t = el("button", "tab", "★");
+      t.type = "button";
+      if (i >= b.total) t.classList.add("empty");
+      else if (b.taken[i] === "1") t.classList.add("torn");
+      else { t.dataset.i = i; t.onclick = () => startDraw(i); }
+      strip.append(t);
+    }
+    tabs.append(strip);
+  }
+  // 기록
+  const s = data.stats;
+  const st = $("b-stats");
+  st.replaceChildren();
+  for (const [k, label, col] of [["r1", "1등", 1], ["r2", "2등", 2], ["r3", "3등", 3], ["r4", "4등", 4], ["r5", "5등", 5], ["r0", "꽝", 0]]) {
+    const x = el("div", "stat");
+    const bb = el("b", "num", fmt(s[k] || 0)); bb.style.color = RANK_COLOR[col];
+    x.append(bb, el("span", null, label));
+    st.append(x);
+  }
+  if (left === 0) setTimeout(boardDone, 400);
+}
+$("btn-random").onclick = () => {
+  const b = data.board;
+  const open = [];
+  for (let i = 0; i < b.total; i++) if (b.taken[i] === "0") open.push(i);
+  if (!open.length) return boardDone();
+  startDraw(open[rnd(open.length)]);
+};
+$("btn-new").onclick = () => {
+  const b = data.board;
+  const left = b.total - takenCount(b);
+  if (left === 0) return renderPick(true);
+  openSheet((sh) => {
+    sh.append(el("h3", null, "🔄 새 판으로 바꿀까요?"), el("div", "hint", `지금 판에 ${left}칸이 남아 있어요. 바꾸면 남은 칸은 사라져요. (기록은 그대로)`));
+    const yes = el("button", "btn block", "새 판 고르기"); yes.type = "button";
+    yes.onclick = () => { closeSheet(); renderPick(true); };
+    const no = el("button", "btn gray block", "계속 뽑기"); no.type = "button"; no.onclick = closeSheet;
+    sh.append(yes, no);
+  }, true);
+};
+window.addEventListener("resize", () => { if (!$("board").classList.contains("hidden")) renderBoard(); });
+function boardDone() {
+  if ($("overlay").classList.contains("hidden") === false) return;
+  const b = data.board;
+  openSheet((sh) => {
+    sh.append(el("h3", null, "🎉 판을 다 뜯었어요!"), el("div", "hint", `${b.name} ${b.total}칸을 전부 뽑았어요. 새 판을 골라 볼까요?`));
+    const yes = el("button", "btn block", "🎟️ 새 판 고르기"); yes.type = "button";
+    yes.onclick = () => { closeSheet(); renderPick(true); };
+    sh.append(yes);
+  }, true);
+}
+
+/* ---------------- 효과음 ---------------- */
+let actx = null, noiseBuf = null;
+function audio() {
+  if (!data || !data.settings.sound) return null;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+    if (!noiseBuf) {
+      noiseBuf = actx.createBuffer(1, actx.sampleRate * 1, actx.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+    return actx;
+  } catch (e) { return null; }
+}
+function noise(dur, freq, q, vol, type = "bandpass", f2) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime;
+  const src = a.createBufferSource(); src.buffer = noiseBuf; src.playbackRate.value = 0.8 + Math.random() * 0.4;
+  const f = a.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+  if (f2) f.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  const gn = a.createGain(); gn.gain.setValueAtTime(vol, t); gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(gn).connect(a.destination);
+  src.start(t, Math.random() * 0.5, dur + 0.05);
+}
+function tone(f, start, dur, type = "triangle", vol = 0.12, f2) {
+  const a = audio(); if (!a) return;
+  const t = a.currentTime + start;
+  const o = a.createOscillator(), gn = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(f, t);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  gn.gain.setValueAtTime(0.0001, t); gn.gain.exponentialRampToValueAtTime(vol, t + 0.012); gn.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(gn).connect(a.destination); o.start(t); o.stop(t + dur + 0.03);
+}
+const sfx = {
+  tick: () => tone(1400, 0, 0.03, "sine", 0.05),
+  rip: (v) => noise(0.05 + Math.random() * 0.04, 2500 + Math.random() * 1800, 1.2, Math.min(0.5, 0.12 + v * 0.05)),
+  ripEnd: () => { noise(0.22, 3000, 0.8, 0.5, "bandpass", 1200); tone(180, 0, 0.08, "square", 0.05, 90); },
+  swish: (v) => noise(0.12, 900 + v * 80, 0.7, 0.12, "lowpass"),
+  creak: () => tone(320 + Math.random() * 60, 0, 0.05, "sine", 0.03),
+  reveal: (r) => {
+    if (r === 0) { tone(392, 0, 0.25, "sawtooth", 0.05, 330); tone(330, 0.25, 0.45, "sawtooth", 0.05, 220); return; }
+    const scales = { 5: [523, 659], 4: [523, 659, 784], 3: [523, 659, 784, 1047], 2: [523, 659, 784, 1047, 1319], 1: [523, 659, 784, 1047, 1319, 1568, 2093] };
+    scales[r].forEach((f, k) => tone(f, k * 0.09, 0.35, "triangle", 0.12));
+    if (r <= 2) scales[r].forEach((f, k) => tone(f * 2, 0.6 + k * 0.05, 0.4, "sine", 0.05));
+    if (r === 1) { [1047, 1319, 1568].forEach((f) => tone(f, 1.0, 1.2, "triangle", 0.1)); noise(1.2, 6000, 0.5, 0.08, "highpass"); }
+  },
+  rumble: () => tone(70, 0, 0.5, "sine", 0.18, 50),
+};
+const buzz = (ms) => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* 괜찮음 */ } };
+
+/* ---------------- 반짝이 · 색종이 ---------------- */
+const fx = $("fx"), fg = fx.getContext("2d");
+let parts = [], fxOn = false;
+function fxResize() { const d = window.devicePixelRatio || 1; fx.width = innerWidth * d; fx.height = innerHeight * d; fg.setTransform(d, 0, 0, d, 0, 0); }
+fxResize(); window.addEventListener("resize", fxResize);
+function burst(r, x = innerWidth / 2, y = innerHeight * 0.45) {
+  const n = { 1: 220, 2: 130, 3: 80, 4: 40, 5: 24, 0: 0 }[r];
+  const cols = r === 1 ? ["#FF4D8D", "#FF9F43", "#F7D547", "#3BD18A", "#3B9BFF", "#A35BFF", "#fff"] : [RANK_COLOR[r], "#fff", "#FFE24A"];
+  for (let k = 0; k < n; k++) {
+    const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * (r <= 2 ? 11 : 7);
+    parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 4, g: 0.18, life: 0, max: 90 + Math.random() * 70, col: cols[k % cols.length], s: 4 + Math.random() * 5, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.4, star: Math.random() < 0.3 });
+  }
+  if (r === 1) for (let k = 0; k < 120; k++) parts.push({ x: Math.random() * innerWidth, y: -20 - Math.random() * 300, vx: (Math.random() - 0.5) * 2, vy: 2 + Math.random() * 3, g: 0.03, life: 0, max: 260, col: cols[k % cols.length], s: 5 + Math.random() * 5, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3 });
+  if (!fxOn) { fxOn = true; requestAnimationFrame(fxLoop); }
+}
+function fxLoop() {
+  fg.clearRect(0, 0, innerWidth, innerHeight);
+  for (const p of parts) {
+    p.life++; p.vy += p.g; p.vx *= 0.99; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+    const a = Math.max(0, 1 - p.life / p.max);
+    fg.globalAlpha = a; fg.fillStyle = p.col;
+    fg.save(); fg.translate(p.x, p.y); fg.rotate(p.rot);
+    if (p.star) { fg.beginPath(); for (let k = 0; k < 10; k++) { const rr = k % 2 ? p.s * 0.45 : p.s; const an = (Math.PI / 5) * k; fg.lineTo(Math.cos(an) * rr, Math.sin(an) * rr); } fg.closePath(); fg.fill(); }
+    else fg.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2);
+    fg.restore();
+  }
+  fg.globalAlpha = 1;
+  parts = parts.filter((p) => p.life < p.max && p.y < innerHeight + 40);
+  if (parts.length) requestAnimationFrame(fxLoop); else { fxOn = false; fg.clearRect(0, 0, innerWidth, innerHeight); }
+}
+
+/* =====================================================================
+   뽑기 : ① 아래로 당겨 뜯기 → ② 옆으로 밀어 펼치기 → ③ 결과
+   ===================================================================== */
+let drawing = null; // { i, rank, step }
+function startDraw(i) {
+  const b = data.board;
+  if (!b || b.taken[i] !== "0" || drawing) return;
+  audio(); // 아이폰은 손가락으로 누를 때 소리를 켜야 해요
+  sfx.tick();
+  drawing = { i, rank: Number(b.deck[i]), step: "tear" };
+  $("stage").classList.remove("hidden");
+  $("st-title").textContent = `${b.name} · ${i + 1}번 칸`;
+  if (data.settings.quick) return quickDraw();
+  stepTear();
+}
+$("st-close").onclick = () => {
+  if (!drawing) return closeStage();
+  if (drawing.step === "tear") return closeStage(); // 아직 안 뜯었으면 그냥 닫기
+  if (drawing.step === "open") { finishOpen(true); return; } // 뜯었으면 결과까지 보여줌
+  closeStage();
+};
+function closeStage() {
+  drawing = null;
+  $("stage").classList.add("hidden");
+  $("st-area").replaceChildren();
+  $("st-bottom").replaceChildren();
+  renderBoard();
+}
+
+// ① 뜯기
+function stepTear() {
+  const area = $("st-area"), bottom = $("st-bottom");
+  area.replaceChildren(); bottom.replaceChildren();
+  $("st-guide").textContent = "⭐을 잡고 아래로 쭉 당겨서 뜯어요!";
+  const strip = el("div", "tear-strip");
+  const tab = el("div", "tear-tab", "★");
+  const rip = el("div", "rip"); rip.style.width = "0%";
+  tab.append(rip);
+  const hint = el("div", "pull-hint", "👇");
+  area.append(strip, tab, hint);
+  bottom.append(el("div", "hint", "천천히 당기면 찌익 소리가 나요 · 끝까지 당기면 뜯어져요"));
+  bottom.lastChild.style.cssText = "color:rgba(255,255,255,0.7);text-align:center";
+  let start = null, prog = 0, lastY = 0, lastSound = 0, done = false;
+  const NEED = Math.min(230, innerHeight * 0.3);
+  const apply = () => {
+    const dy = prog * NEED;
+    const wob = Math.sin(prog * 30) * prog * 2;
+    tab.style.transform = `translateY(${dy * 0.55}px) rotate(${wob + prog * 6}deg)`;
+    rip.style.width = Math.min(100, prog * 115) + "%";
+    tab.style.boxShadow = `0 ${14 + prog * 20}px ${30 + prog * 20}px rgba(0,0,0,0.45)`;
+  };
+  tab.onpointerdown = (e) => { if (done) return; start = e.clientY - prog * NEED; lastY = e.clientY; tab.setPointerCapture(e.pointerId); hint.style.display = "none"; audio(); };
+  tab.onpointermove = (e) => {
+    if (start == null || done) return;
+    const np = Math.max(0, Math.min(1.05, (e.clientY - start) / NEED));
+    const v = Math.abs(e.clientY - lastY);
+    lastY = e.clientY;
+    if (np > prog && performance.now() - lastSound > 40 && v > 0.5) { sfx.rip(v); lastSound = performance.now(); if (Math.random() < 0.3) buzz(5); }
+    prog = np;
+    apply();
+    if (prog >= 1) { done = true; tearOff(tab, strip); }
+  };
+  tab.onpointerup = tab.onpointercancel = () => {
+    if (done) return;
+    start = null;
+    // 덜 당기면 다시 돌아감
+    const back = () => { prog *= 0.75; apply(); if (prog > 0.01 && !done && start == null) requestAnimationFrame(back); else if (start == null) { prog = 0; apply(); } };
+    requestAnimationFrame(back);
+  };
+}
+function tearOff(tab, strip) {
+  sfx.ripEnd(); buzz(25);
+  tab.style.transition = "transform 0.45s cubic-bezier(.2,.8,.3,1.2), opacity 0.45s";
+  tab.style.transform = `translateY(${innerHeight * 0.18}px) rotate(-8deg) scale(1.1)`;
+  strip.style.transition = "transform 0.4s, opacity 0.4s";
+  strip.style.transform = "translate(-50%, -140px)"; strip.style.opacity = "0";
+  // 뜯은 순간 저장 (중간에 나가도 이 칸은 뜯은 걸로)
+  markTaken();
+  setTimeout(stepOpen, 480);
+}
+function markTaken() {
+  const b = data.board, d = drawing;
+  if (b.taken[d.i] === "1") return;
+  b.taken = b.taken.slice(0, d.i) + "1" + b.taken.slice(d.i + 1);
+  const s = data.stats;
+  s.draws++; s["r" + d.rank] = (s["r" + d.rank] || 0) + 1;
+  data.history.unshift({ at: Date.now(), rank: d.rank, prize: d.rank ? b.prizes[d.rank - 1] : "", board: b.name, no: d.i + 1 });
+  if (data.history.length > 200) data.history.length = 200;
+  save(true);
+}
+
+// ② 펼치기
+function stepOpen() {
+  drawing.step = "open";
+  const r = drawing.rank, b = data.board;
+  const area = $("st-area"), bottom = $("st-bottom");
+  area.replaceChildren(); bottom.replaceChildren();
+  $("st-guide").textContent = "접힌 종이를 옆으로 밀어서 펼쳐요 👉";
+  const rays = el("div", "rays");
+  const holder = el("div");
+  holder.style.cssText = "position:relative;transform:translateX(60px);transition:transform 0.5s";
+  const glow = el("div", "edge-glow");
+  glow.style.background = r === 1 ? RANK_BG[1] : RANK_COLOR[r];
+  const paper = el("div", "paper");
+  const resultHTML = () => {
+    const res = el("div", "result");
+    res.style.background = RANK_BG[r];
+    res.append(el("div", "rk", rankName(r)), el("div", "rp", r ? b.prizes[r - 1] : "다음 기회에… 😢"), el("div", "rs", r ? "당첨을 축하해요!" : "괜찮아, 한 번 더!"));
+    return res;
+  };
+  const base = el("div", "half base");
+  base.append(resultHTML());
+  const flap = el("div", "half flap");
+  const inF = el("div", "face in"); inF.append(resultHTML());
+  const outF = el("div", "face out"); outF.append(el("div", "stamp", "★ ON-DRAW ★"));
+  flap.append(inF, outF);
+  paper.append(base, flap);
+  holder.append(glow, paper);
+  area.append(rays, holder);
+  const hint = el("div", "hint", "살짝만 밀면 안쪽 색이 보여요… 두근두근");
+  hint.style.cssText = "color:rgba(255,255,255,0.7);text-align:center";
+  bottom.append(hint);
+  let prog = 0, start = null, lastX = 0, lastSnd = 0, done = false, shook = false;
+  const apply = () => {
+    const ang = -180 + prog * 180;
+    flap.style.transform = `rotateY(${ang}deg) translateZ(-1px)`;
+    holder.style.transform = `translateX(${60 * (1 - prog)}px)`;
+    // 안쪽이 조금 보이기 시작하면 테두리 빛
+    const peek = Math.max(0, Math.min(1, (prog - 0.04) / 0.35));
+    glow.style.opacity = r === 0 ? peek * 0.15 : peek * (r === 1 ? 1 : r === 2 ? 0.9 : r === 3 ? 0.75 : 0.55);
+    // 1·2등은 펼칠 때 덜덜 떨려요
+    if (r && r <= 2 && prog > 0.25 && !shook) { shook = true; paper.classList.add("shake"); sfx.rumble(); buzz([30, 40, 30]); }
+  };
+  apply();
+  const W = 200;
+  holder.onpointerdown = (e) => { if (done) return; start = e.clientX - prog * W; lastX = e.clientX; holder.setPointerCapture(e.pointerId); audio(); };
+  holder.onpointermove = (e) => {
+    if (start == null || done) return;
+    const np = Math.max(0, Math.min(1, (e.clientX - start) / W));
+    const v = Math.abs(e.clientX - lastX); lastX = e.clientX;
+    if (performance.now() - lastSnd > 70 && v > 1) { sfx.swish(v); if (Math.random() < 0.4) sfx.creak(); lastSnd = performance.now(); }
+    prog = np; apply();
+    if (prog > 0.85) { done = true; finishOpen(false, { flap, holder, glow, paper, rays }); }
+  };
+  holder.onpointerup = holder.onpointercancel = () => {
+    if (done) return;
+    start = null;
+    if (prog > 0.6) { done = true; finishOpen(false, { flap, holder, glow, paper, rays }); return; }
+    const back = () => { prog *= 0.8; apply(); if (prog > 0.01 && start == null && !done) requestAnimationFrame(back); };
+    requestAnimationFrame(back);
+  };
+  drawing.parts = { flap, holder, glow, paper, rays };
+}
+function finishOpen(fromClose, p) {
+  if (drawing.step === "result") return;
+  p = p || drawing.parts;
+  drawing.step = "result";
+  const r = drawing.rank, b = data.board;
+  p.paper.classList.remove("shake");
+  p.flap.style.transition = "transform 0.35s ease-out";
+  p.flap.style.transform = "rotateY(0deg)";
+  p.holder.style.transform = "translateX(0) scale(1.08)";
+  p.holder.onpointerdown = p.holder.onpointermove = p.holder.onpointerup = null;
+  setTimeout(() => {
+    sfx.reveal(r);
+    if (r) {
+      burst(r);
+      p.glow.style.opacity = r === 1 ? 1 : 0.8;
+      if (r <= 3) p.rays.style.opacity = r === 1 ? 1 : 0.6;
+      if (r <= 2) { const f = el("div", "flash"); document.body.append(f); setTimeout(() => f.remove(), 700); buzz([60, 40, 120]); }
+    } else {
+      p.paper.animate([{ transform: "rotate(0)" }, { transform: "rotate(-6deg)" }, { transform: "rotate(5deg)" }, { transform: "rotate(0)" }], { duration: 450 });
+      buzz(40);
+    }
+    $("st-guide").textContent = r ? (r === 1 ? "🎊 대박!!! 1등 당첨!!! 🎊" : `🎉 ${r}등 당첨!`) : "꽝… 다음엔 꼭!";
+    const bottom = $("st-bottom");
+    bottom.replaceChildren();
+    const big = el("div", "big-rank", r ? `${rankName(r)} · ${b.prizes[r - 1]}` : "꽝");
+    big.style.color = r === 1 ? "#FFE24A" : r ? RANK_COLOR[r] : "#C9C0B5";
+    bottom.append(big);
+    const left = b.total - takenCount(b);
+    const row = el("div");
+    row.style.cssText = "display:flex;gap:8px";
+    const back = el("button", "btn ghost", "판으로"); back.type = "button"; back.style.flex = "1";
+    back.onclick = closeStage;
+    row.append(back);
+    if (left > 0) {
+      const again = el("button", "btn", "🎲 한 번 더"); again.type = "button"; again.style.flex = "1.4";
+      again.onclick = () => {
+        const open = [];
+        for (let i = 0; i < b.total; i++) if (b.taken[i] === "0") open.push(i);
+        drawing = null;
+        $("st-area").replaceChildren();
+        startDraw(open[rnd(open.length)]);
+      };
+      row.append(again);
+    }
+    bottom.append(row);
+  }, fromClose ? 50 : 330);
+}
+// 빨리 뽑기 (설정에서 켜면 손으로 안 해도 자동으로)
+function quickDraw() {
+  markTaken();
+  stepOpen();
+  const p = drawing.parts;
+  p.flap.style.transition = "transform 0.6s ease-in-out";
+  setTimeout(() => finishOpen(false, p), 250);
+}
+
+/* ---------------- 기록 · 메뉴 ---------------- */
+$("btn-hist").onclick = () => openSheet((sh) => {
+  sh.append(el("h3", null, "📜 뽑기 기록"));
+  const s = data.stats;
+  const best = [1, 2, 3, 4, 5].find((r) => s["r" + r] > 0);
+  sh.append(el("div", "hint", `지금까지 ${fmt(s.draws)}번 뽑았어요 · 판 ${fmt(s.boards)}개 · 최고 기록 ${best ? best + "등" : "아직 없음"}${s.draws ? ` · 당첨률 ${Math.round(((s.draws - s.r0) / s.draws) * 100)}%` : ""}`));
+  if (!data.history.length) sh.append(el("div", "hint", "아직 기록이 없어요. 판에서 칸을 뜯어 보세요!"));
+  for (const h of data.history.slice(0, 60)) {
+    const row = el("div", "hist");
+    const dot = el("span", "rank-dot", rankName(h.rank)); dot.style.background = RANK_COLOR[h.rank];
+    const d = new Date(h.at);
+    const txt = el("div"); txt.style.flex = "1"; txt.style.minWidth = "0";
+    txt.append(el("div", "what", h.rank ? h.prize : "꽝"), el("div", "when", `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} · ${h.board} ${h.no}번`));
+    row.append(dot, txt);
+    sh.append(row);
+  }
+});
+document.querySelectorAll(".menu-open").forEach((b) => (b.onclick = openMenu));
+function openMenu() {
+  openSheet((sh) => {
+    sh.append(el("h3", null, "☰ 메뉴"));
+    const btn = (ic, text, fn) => { const b = el("button", "menu-btn"); b.type = "button"; b.append(el("span", "mi", ic), el("span", null, text)); b.onclick = fn; sh.append(b); };
+    const st = data.settings;
+    btn(st.sound ? "🔊" : "🔇", st.sound ? "효과음 켜짐 (누르면 끄기)" : "효과음 꺼짐 (누르면 켜기)", () => { st.sound = !st.sound; save(); closeSheet(); toast(st.sound ? "🔊 효과음 켰어요" : "🔇 효과음 껐어요"); });
+    btn(st.quick ? "⚡" : "✋", st.quick ? "빨리 뽑기 켜짐 · 자동으로 펼쳐요" : "손으로 뜯기 (빨리 뽑기 꺼짐)", () => { st.quick = !st.quick; save(); closeSheet(); toast(st.quick ? "⚡ 빨리 뽑기: 누르면 바로 결과" : "✋ 손으로 뜯고 펼쳐요"); });
+    btn("🎟️", "새 판 고르기", () => { closeSheet(); $("btn-new").onclick(); });
+    btn("📜", "뽑기 기록", () => { closeSheet(); $("btn-hist").onclick(); });
+    btn("🗑️", "기록 지우기", () => {
+      openSheet((s2) => {
+        s2.append(el("h3", null, "기록을 지울까요?"), el("div", "hint", "등수별 횟수와 뽑기 기록이 지워져요. 지금 판은 그대로예요."));
+        const yes = el("button", "btn red block", "지우기"); yes.type = "button";
+        yes.onclick = () => { const keep = data.stats.boards; data.stats = blankData().stats; data.stats.boards = keep; data.history = []; save(true); closeSheet(); renderBoard(); toast("기록을 지웠어요"); };
+        const no = el("button", "btn gray block", "아니요"); no.type = "button"; no.onclick = closeSheet;
+        s2.append(yes, no);
+      }, true);
+    });
+    btn("🚪", "로그아웃", () => { closeSheet(); uid = null; data = null; window.odRemote.logout(); });
+  });
+}
+
+/* ---------------- 로그인 (온챗 계정) ---------------- */
+let useGmail = false;
+$("l-gmail").onclick = () => {
+  useGmail = !useGmail;
+  $("l-email").classList.toggle("hidden", !useGmail);
+  $("l-gmail").textContent = useGmail ? "전화번호로 로그인할래요" : "예전에 Gmail로 가입했어요";
+};
+function waitRemote(timeout = 6000) {
+  return new Promise((res) => {
+    if (window.odRemote) return res(true);
+    const t = setTimeout(() => res(false), timeout);
+    window.addEventListener("odremote-ready", () => { clearTimeout(t); res(true); }, { once: true });
+  });
+}
+async function doLogin() {
+  const phone = $("l-phone").value.replace(/\D/g, "");
+  const pw = $("l-pw").value;
+  $("l-msg").textContent = "";
+  if (!/^01\d{8,9}$/.test(phone)) return ($("l-msg").textContent = "온챗 전화번호를 확인해 주세요");
+  if (pw.length < 6) return ($("l-msg").textContent = "비밀번호는 6자 이상이에요");
+  const email = useGmail ? $("l-email").value.trim().toLowerCase() : `${phone}@onchat-fc78e.firebaseapp.com`;
+  $("l-go").disabled = true;
+  try {
+    if (!(await waitRemote())) throw { code: "net" };
+    myPhone = phone;
+    await window.odRemote.login(email, pw);
+  } catch (e) {
+    const code = e && e.code;
+    $("l-msg").textContent = code === "net" || code === "auth/network-request-failed" ? "인터넷 연결을 확인해 주세요" : code === "auth/too-many-requests" ? "너무 많이 시도했어요. 잠시 뒤에 해 주세요" : "전화번호 또는 비밀번호가 맞지 않아요. 온챗에서 쓰는 걸 넣어 주세요";
+  } finally { $("l-go").disabled = false; }
+}
+$("l-go").onclick = doLogin;
+$("l-pw").addEventListener("keydown", (e) => e.key === "Enter" && doLogin());
+(async () => {
+  if (!(await waitRemote())) { $("l-msg").textContent = "서버에 연결하지 못했어요. 인터넷을 확인해 주세요"; return; }
+  window.odRemote.onAuth((user) => {
+    if (!user) { uid = null; data = null; show("login"); return; }
+    if (uid === user.uid && data) return;
+    uid = user.uid;
+    window.odRemote.once("users/" + uid, (v, err) => {
+      if (err) { toast("불러오지 못했어요 (Firebase 규칙 확인)", "err"); }
+      data = normalize(v);
+      if (data.board) renderBoard(); else renderPick(false);
+    });
+  });
+})();
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
